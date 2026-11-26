@@ -1,87 +1,45 @@
-Object Detection with Detectron2 and Streamlit
-==============================================
+# EagleEye
 
-This repository contains a simple **Streamlit** application that uses **Detectron2** to perform object detection on images. You can upload an image (PNG, JPG, or JPEG), and the app processes the image using a pre-trained COCO model to display and allow you to download the annotated image (with bounding boxes and class labels).
+**Upload a local image, inspect COCO object predictions, and download an annotated PNG.** EagleEye is a small Streamlit front end for Detectron2's CPU Mask R-CNN model.
 
-Application Overview
---------------------
+## Try it
 
-1.  **Image Upload**  
-    The user selects a local image to upload.
-2.  **Processing**  
-    The application uses a pre-trained instance segmentation model from Detectron2 (`COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml`) to detect objects.
-3.  **Visualization**  
-    The resulting image, annotated with bounding boxes and labels, is displayed on the Streamlit page.
-4.  **Download**  
-    A button allows you to download the annotated image as a PNG file.
+The repository's Dockerfile is the reference Linux/amd64 setup. It uses Python 3.8 and PyTorch 1.8 CPU, an older stack; use a local container rather than treating this setup as a production deployment. On Windows, switch Docker Desktop to Linux containers.
 
-Project Structure
------------------
-<br>
-├── app.py            (Main Streamlit application code) <br>
-├── Dockerfile        (Optional Dockerfile to build an image with Detectron2 and Streamlit) <br>
-└── README.md         (This documentation file <br>
+```bash
+git clone https://github.com/BetoBraga/eagle-eye.git
+cd eagle-eye
+docker build -t eagle-eye:local .
+docker run --rm -p 127.0.0.1:8501:8501 eagle-eye:local streamlit run app.py --server.address 0.0.0.0 --server.headless true
+```
 
-Prerequisites
--------------
+1. Open [localhost:8501](http://localhost:8501).
+2. Upload [the synthetic stop-sign fixture](demo/synthetic-stop-sign.png), or a local PNG/JPG/JPEG of your own. The first prediction can download the public Detectron2 weights. Allow egress to the model host if the weights are not already cached.
+3. Check the displayed labels and masks, then use **Download Annotated Image** to save `output.png`.
 
-*   Python 3.8+
-*   pip for installing dependencies
+For a native install, follow [Detectron2's compatibility matrix](https://detectron2.readthedocs.io/en/latest/tutorials/install.html) and install the matching PyTorch/torchvision pair before Detectron2. Install Streamlit, OpenCV (headless), and Pillow in the same environment, then run `python -m streamlit run app.py --server.headless true`. Do not assume the Dockerfile's archived wheel works on native Windows or a recent Python.
 
-Installation
-------------
+## Example and reproducibility
 
-1.  Clone the repository (or download the files).
+| Synthetic input | Actual Detectron2 output |
+| :--- | :--- |
+| ![Synthetic illustration of a red stop sign beside a road](demo/synthetic-stop-sign.png) | ![The model's mask and stop-sign label rendered on the synthetic input](demo/synthetic-stop-sign-annotated.png) |
 
-    ```git clone https://github.com/BetoBraga/eagle-eye```
-2.  Install the dependencies:
-    
-    ```pip install streamlit opencv-python-headless pillow```
-    
-    Then, install Detectron2 (CPU version) as per the official instructions or by using:
-    
-    pip install detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch1.8/index.html
-    
+This 384 × 256 input was drawn for EagleEye with no source imagery. [The generator](demo/make_fixture.py) creates it with Pillow. The fixture PNG may be freely copied and redistributed. This does not change the licensing of the app, weights, or historic demo files.
 
-Running Locally
----------------
+The checked-in output was generated in the repository's Linux/amd64 Docker image (Python 3.8, PyTorch 1.8 CPU, Detectron2 0.6 CPU). This run returned one detection: stop sign, confidence 0.9990. The result is a single synthetic fixture, not benchmark evidence. Reproduce the app's inference and rendering path without the browser by running:
 
-1.  Open a terminal in the directory containing `app.py`.
-2.  Run Streamlit:
-    
-    ```streamlit run app.py```
-    
-3.  Access the application:  
-    The terminal will display a link (usually `http://localhost:8501`). Open it in your browser to use the app.
+```bash
+docker run --rm eagle-eye:local python demo/run_fixture.py demo/synthetic-stop-sign.png /tmp/eagleeye-annotated.png
+```
 
-Usage
------
+This prints the detected class names and confidence scores and writes a PNG inside the container, which is removed on exit. To keep the image, create an empty local output directory and bind-mount it, then pass a path inside that mount instead of `/tmp/eagleeye-annotated.png`.
 
-1.  **Upload an Image**  
-    Click the button to upload a PNG, JPG, or JPEG file.
-2.  **View the Results**  
-    The app displays the processed image with detected objects (bounding boxes and labels).
-3.  **Download the Annotated Image**  
-    Click the "Download Annotated Image" button to save the result locally as a PNG file.
+## How it works
 
-Running via Docker (Optional)
------------------------------
+- [`app.py`](app.py) decodes uploads with OpenCV, runs pretrained COCO Mask R-CNN R50-FPN on CPU, and filters predictions below **0.50** confidence.
+- The output renders the detections found by the model. An empty result is possible; the model may miss objects or assign the wrong label. The app does not recognize arbitrary classes or train a model.
+- With the loopback Docker command, the browser connects to the container on your own machine and the app itself does not intentionally send the uploaded image to any third-party API. The dependency installation and uncached model weight download require network access.
+- [`Dockerfile`](Dockerfile) defines the Linux CPU image. [`demo/run_fixture.py`](demo/run_fixture.py) runs the same model setup and visualization code as the app.
 
-1.  **Build the Docker image:**
-    
-    docker build -t detectron2-streamlit .
-    
-2.  **Run the container:**
-    
-    docker run -p 8501:8501 --rm detectron2-streamlit
-    
-3.  **Access the application:**  
-    Open `http://localhost:8501` in your browser.
-
-**Note:** If you want to mount a volume to exchange files (e.g., for input/output images), use the `-v` option with the `docker run` command.
-
-Credits
--------
-
-*   **Detectron2** – Object detection framework developed by Facebook AI Research.
-*   **Streamlit** – A tool for rapidly building web apps in Python.
+Upstream projects: [Detectron2](https://github.com/facebookresearch/detectron2), [Streamlit](https://github.com/streamlit/streamlit), and [COCO](https://cocodataset.org/).
